@@ -50,12 +50,10 @@ income.splitpoints <- (income.sorted[1:7]+income.sorted[2:8])/2
 # print(length(x))
 # bestsplit(credit.dat[,4],credit.dat[,6], 2, income.splitpoints)
 
-tree.grow <- function(x, y, nmin, minleaf, nfeat) {
+tree.createsplit <- function(x, y, nmin, minleaf, nfeat){
 
 	# number of features
 	tot_feat <- length(x)
-
-	# 1 splitloop:
 
 	# choose features with nfeat
 	# generate nfeat random numbers from tot_feat
@@ -87,9 +85,76 @@ tree.grow <- function(x, y, nmin, minleaf, nfeat) {
 		}
 	}
 
-	print(best_split.feat)
-	print(best_split.imp_red)
-	print(best_split.val)
+	# print(best_split.feat)
+	# print(best_split.imp_red)
+	# print(best_split.val)
+	
+	return(c(best_split.feat, best_split.val))
+
+}
+
+tree.grow_rec <- function(x, y, nmin, minleaf, nfeat, n){
+
+	feat_val <- tree.createsplit(x, y, nmin, minleaf, nfeat)
+
+	col_split.col <- x[,feat_val[1]]
+	col_split.val <- feat_val[2]
+
+	# place node
+	tree[[n]] <- 
+	print(tree)
+
+	# create children
+	node_left <- which(col_split.col < col_split.val)
+	if (length(node_left) > nmin){
+		#new split
+		print("yay")
+	} else {
+		#onthoud node!!
+		tree[[]]
+	}
+
+	node_right <- which(col_split.col > col_split.val)
+
+
+}
+
+tree.grow <- function(x, y, nmin, minleaf, nfeat) {
+
+	# setup tree
+	tree <- list()
+
+	# tree[[3]] <- c(4,5,6) hoera
+	# print(tree)
+
+	# root node
+	feat_val <- tree.createsplit(x, y, nmin, minleaf, nfeat)
+
+	col_split.col <- x[,feat_val[1]]
+	col_split.val <- feat_val[2]
+
+	# place rootnode
+	nodes <- c(1:nrow(x))
+	node_root <- c(feat_val[1], col_split.val, nodes)
+	tree[[1]] <- node_root
+	print(tree)
+
+	# create children
+	node_left <- which(col_split.col < col_split.val)
+	if (length(node_left) > nmin){
+		#new split
+		print("yay")
+	} else {
+		#onthoud node!!
+		tree[[]]
+	}
+
+	node_right <- which(col_split.col > col_split.val)
+
+	# repeat...
+	print(node_left)
+	print(node_right)
+
 
 	# next: verzamel nieuwe punten en ga door. Als geen split gevonden is (bijv. best_split.feat = 0) dan dus een leaf aanmaken
 	# check for nmin constraint

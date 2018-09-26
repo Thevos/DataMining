@@ -1,4 +1,4 @@
-credit.dat <- read.csv("credit.txt")
+credit.dat <- read.csv("_data/credit.txt")
 credit.x <- credit.dat[1:5]
 credit.y <- credit.dat[,6]
 

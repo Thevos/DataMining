@@ -32,24 +32,16 @@ bestsplit <- function(x, y, minleaf, splitpoints) {
 
 		imp_red <- i_t - ( pi_l * impurity(y_l) + pi_r * impurity(y_r) )
 
-		# print(imp_red)
-
 		if (imp_red > best_red){
 			best_red <- imp_red
 			best_val <- val
 		}
 	}
 
-	# print(best_red)
 	return(c(best_val, best_red))
 }
 
-income.sorted <- sort(unique(credit.dat[,4]))
-income.splitpoints <- (income.sorted[1:7]+income.sorted[2:8])/2
-
-# print(length(x))
-# bestsplit(credit.dat[,4],credit.dat[,6], 2, income.splitpoints)
-
+# Finds the best split over all features
 tree.createsplit <- function(x, y, nmin, minleaf, nfeat){
 
 	# number of features
@@ -98,7 +90,7 @@ tree.label <- function(y, nodes){
 	return(label)
 }
 
-# grow down form given node, favouring left
+# grow down from given node, favouring left
 tree.left_down <- function(tree, node_left, place.new, x, y, nmin, minleaf, nfeat){
 	while (!node_left[1] == 0){
 
@@ -151,7 +143,8 @@ tree.cut <- function(tree){
 	return(tree)
 }
 
-# tree is a list of c objects. each node n is spaced n*2and n*2+1 from its children
+# grow a tree on a sample x, with labels y
+# the tree is a list of c objects. each node n is spaced n*2and n*2+1 from its children
 tree.grow <- function(x, y, nmin, minleaf, nfeat) {
 
 	# setup tree
@@ -177,7 +170,7 @@ tree.grow <- function(x, y, nmin, minleaf, nfeat) {
 	node_right <- which(col_split.col > col_split.val)
 	tree <- tree.left_down(tree, node_right, place.old*2+1, x, y, nmin, minleaf, nfeat)
 
-	# take of extra values
+	# take care of extra values
 	tree <- tree.cut(tree)
 	print(tree)
 

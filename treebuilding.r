@@ -73,9 +73,7 @@ tree.createsplit <- function(x, y, nmin, minleaf, nfeat){
 		vec_x.ready_len <- length(vec_x.ready)
 		vec_x.splitpoints <- (vec_x.ready[1:vec_x.ready_len-1]+vec_x.ready[2:vec_x.ready_len])/2
 
-		# print(vec_x.splitpoints)
 		vec_x.best_split <- bestsplit(vec_x, y, minleaf, vec_x.splitpoints)
-		# print(vec_x.best_split)
 
 		# if higher impurity reduction than best split, set this as best split
 		if (vec_x.best_split[2] > best_split.imp_red){
@@ -84,48 +82,80 @@ tree.createsplit <- function(x, y, nmin, minleaf, nfeat){
 			best_split.val <- vec_x.best_split[1]
 		}
 	}
-
-	# print(best_split.feat)
-	# print(best_split.imp_red)
-	# print(best_split.val)
 	
 	return(c(best_split.feat, best_split.val))
 
 }
 
-tree.grow_rec <- function(x, y, nmin, minleaf, nfeat, n){
-
-	feat_val <- tree.createsplit(x, y, nmin, minleaf, nfeat)
-
-	col_split.col <- x[,feat_val[1]]
-	col_split.val <- feat_val[2]
-
-	# place node
-	tree[[n]] <- 
-	print(tree)
-
-	# create children
-	node_left <- which(col_split.col < col_split.val)
-	if (length(node_left) > nmin){
-		#new split
-		print("yay")
-	} else {
-		#onthoud node!!
-		tree[[]]
+#calculate the label
+tree.label <- function(y, nodes){
+	label <- 0
+	labels <- y[nodes]
+	percentage_ones <- sum(labels)/length(labels)
+	if (percentage_ones > 0.5) {
+		label <- 1
 	}
-
-	node_right <- which(col_split.col > col_split.val)
-
-
+	return(label)
 }
 
+# grow down form given node, favouring left
+tree.left_down <- function(tree, node_left, place.new, x, y, nmin, minleaf, nfeat){
+	while (!node_left[1] == 0){
+
+		# nmin constraint 
+		if (length(node_left) > nmin){
+			#new split
+			new_y <- y[node_left]
+			new_x <- x[node_left,]
+			feat_val <- tree.createsplit(new_x, new_y, nmin, minleaf, nfeat)
+			col_split.col <- x[,feat_val[1]]
+			col_split.val <- feat_val[2]
+
+			# if there is no good split available, create a leaf node
+			if(col_split.val == 0){
+				label <- tree.label(y, node_left)
+				tree[[place.new]] <- c(0, 0, label)
+				node_left <- c(0)
+				}
+			# else place node in tree and set everything up for creating children
+			else {
+				tree[[place.new]] <- c(feat_val[1], col_split.val, node_left)
+				new_node.left <- intersect(which(col_split.col < col_split.val), node_left)
+				new_node.right <- intersect(which(col_split.col > col_split.val), node_left)
+				tree <- tree.left_down(tree, new_node.right, place.new * 2 + 1, x, y, nmin, minleaf, nfeat)
+				node_left <- new_node.left
+				place.new <- place.new * 2
+
+			}
+		} else {
+			# write leafnode
+			label <- tree.label(y, node_left)
+			tree[[place.new]] <- c(0, 0, label)
+			node_left <- c(0)
+		}
+	}
+	return(tree)
+}
+
+# remove all extra items from the nodes
+tree.cut <- function(tree){
+	index <- 0
+	for (node in tree){
+		index <- index + 1
+		if (!is.null(node)){
+			if (!node[1] == 0){
+				tree[[index]] <- node[1:2]
+			}
+		}
+	}
+	return(tree)
+}
+
+# tree is a list of c objects. each node n is spaced n*2and n*2+1 from its children
 tree.grow <- function(x, y, nmin, minleaf, nfeat) {
 
 	# setup tree
 	tree <- list()
-
-	# tree[[3]] <- c(4,5,6) hoera
-	# print(tree)
 
 	# root node
 	feat_val <- tree.createsplit(x, y, nmin, minleaf, nfeat)
@@ -134,33 +164,26 @@ tree.grow <- function(x, y, nmin, minleaf, nfeat) {
 	col_split.val <- feat_val[2]
 
 	# place rootnode
+	place.old <- 1
 	nodes <- c(1:nrow(x))
 	node_root <- c(feat_val[1], col_split.val, nodes)
 	tree[[1]] <- node_root
+
+	
+	#  GO DOWN
+	node_left <- which(col_split.col < col_split.val)
+	tree <- tree.left_down(tree, node_left, place.old*2, x, y, nmin, minleaf, nfeat)
+	
+	node_right <- which(col_split.col > col_split.val)
+	tree <- tree.left_down(tree, node_right, place.old*2+1, x, y, nmin, minleaf, nfeat)
+
+	# take of extra values
+	tree <- tree.cut(tree)
 	print(tree)
 
-	# create children
-	node_left <- which(col_split.col < col_split.val)
-	if (length(node_left) > nmin){
-		#new split
-		print("yay")
-	} else {
-		#onthoud node!!
-		tree[[]]
-	}
-
-	node_right <- which(col_split.col > col_split.val)
-
-	# repeat...
-	print(node_left)
-	print(node_right)
-
-
-	# next: verzamel nieuwe punten en ga door. Als geen split gevonden is (bijv. best_split.feat = 0) dan dus een leaf aanmaken
-	# check for nmin constraint
 }
 
-tree.grow(credit.x, credit.y, 5, 2, 5)
+tree.grow(credit.x, credit.y, 1, 1, 5)
 
 
 

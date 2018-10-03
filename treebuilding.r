@@ -1,4 +1,4 @@
-credit.dat <- read.csv("_data/credit.txt")
+credit.dat <- read.csv("C:/Users/Johnno/Documents/Data Mining/DataMining/_data/credit.txt")
 credit.x <- credit.dat[1:5]
 credit.y <- credit.dat[,6]
 
@@ -173,10 +173,43 @@ tree.grow <- function(x, y, nmin, minleaf, nfeat) {
 	# take care of extra values
 	tree <- tree.cut(tree)
 	print(tree)
+	
+	return(tree)
 
 }
 
-tree.grow(credit.x, credit.y, 1, 1, 5)
+tree.classify <- function(x, tree) {
+  labelled <- vector()
+  
+  for(i in 1:nrow(x)){
+    output = tree.classify_rec(x[i,], tree, 1)
+    labelled <- c(labelled, output)
+  }
+  #output = tree.classify_rec(x[1,], tree, 1)
+  #print(output)
+  #labelled <- c(labelled, output)
+  print(labelled)
+}
+
+tree.classify_rec <- function(x, tree, n){
+  
+  node = tree[[n]]
+  feature = node[1]
+  value = node[2]
+  class = node[3]
+  
+  if(feature == 0 && value == 0)
+    return(class)
+  
+  if(x[feature] < value)
+    tree.classify_rec(x, tree, 2*n)
+  else if(x[feature] > value)
+    tree.classify_rec(x, tree, 2*n+1)
+  
+}
+
+tree <- tree.grow(credit.x, credit.y, 1, 1, 5)
+tree.classify(credit.x, tree)
 
 
 

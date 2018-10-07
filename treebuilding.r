@@ -176,14 +176,6 @@ tree.grow <- function(x, y, nmin, minleaf, nfeat) {
 
 }
 
-tree.grow(credit.x, credit.y, 1, 1, 5)
-
-
-
-
-
-
-
 
 
 

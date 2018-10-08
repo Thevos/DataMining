@@ -1,6 +1,92 @@
 # Grow trees on classified data
 # Nora Schinkel & Johnno de Vos
 
+
+
+## TO DO LIJST ##
+# Maak nfeat in createsplit zodat hij random dingen kiest
+# Maak random forest
+# Meet de accuracy in measures (geen idee wat daarmee wordt bedoeld)
+# Zorg voor een computer die bij m=100 niet gloeiend heet wordt ;)
+
+
+
+####################### MAIN FUNCTIONS ###############################
+
+# grow a tree on a sample x, with labels y
+# the tree is a list of c objects. each node n is spaced n*2and n*2+1 from its children
+tree.grow <- function(x, y, nmin, minleaf, nfeat) {
+
+	# root node
+	feat_val <- tree.createsplit(x, y, nmin, minleaf, nfeat)
+
+	# no split from root
+	if(feat_val[1] == 0){
+		return(data.frame("feat"=0, "val"=0, "label"=label(y,c(1:length(y)))))
+	}
+
+	col_split.col <- x[,feat_val[1]]
+	col_split.val <- feat_val[2]
+
+	# place rootnode
+	place.old <- 1
+	nodes <- c(1:nrow(x))
+	tree <- data.frame("feat"=feat_val[1], "val"=col_split.val, "label"=-1)
+
+	
+	#  GO DOWN
+	node_left <- which(col_split.col < col_split.val)
+	tree <- tree.left_down(tree, node_left, place.old*2, x, y, nmin, minleaf, nfeat)
+	
+	node_right <- which(col_split.col > col_split.val)
+	tree <- tree.left_down(tree, node_right, place.old*2+1, x, y, nmin, minleaf, nfeat)
+	
+	return(tree)
+
+}
+
+tree.classify <- function(x, tree) {
+  labeled <- vector()
+  
+  for(i in 1:nrow(x)){
+    output <- tree.classify_rec(x[i,], tree, 1)
+    labeled <- c(labeled, output)
+  }
+  return(labeled)
+}
+
+# grow m trees over m bootstrap samples
+tree.grow.bag <- function(x, y, nmin, minleaf, nfeat, m){
+	returnlist <- list()
+	#create m trees
+	for(i in 1:m){
+		x$y <- y
+		training <- tree.bootstrap_sample(x, m)
+		new_y <- training[,ncol(training)]
+		training$y <- NULL
+		returnlist[[i]] <- tree.grow(training, new_y, nmin, minleaf, nfeat)
+	}
+	return(returnlist)
+}
+
+# classify bagged trees by choosing majority vote after m trees
+tree.classify.bag <- function(x, trees){
+	prep <- seq(0,0,length.out=nrow(x))
+	#keep track of how many classified 1's and 0's
+	prediction <- data.frame("0"=prep, "1"=prep)
+
+	# fill prediction frame
+	for(tree in trees){
+		cl <- tree.classify(x, tree)
+		prediction <- tree.classify.bag.count(prediction, cl)
+	}
+	
+	# take majority vote
+	final_prediction <- prep
+	final_prediction[which(prediction[,1] < prediction[,2])] <- 1
+	return(final_prediction)
+}
+
 ####################### SPLIT AND LABEL #################################
 
 # Calc impurity by Gini index
@@ -89,39 +175,7 @@ tree.label <- function(y, nodes){
 	return(label)
 }
 
-####################### GROW AND BAG #################################
-
-# grow a tree on a sample x, with labels y
-# the tree is a list of c objects. each node n is spaced n*2and n*2+1 from its children
-tree.grow <- function(x, y, nmin, minleaf, nfeat) {
-
-	# root node
-	feat_val <- tree.createsplit(x, y, nmin, minleaf, nfeat)
-
-	# no split from root
-	if(feat_val[1] == 0){
-		return(data.frame("feat"=0, "val"=0, "label"=label(y,c(1:length(y)))))
-	}
-
-	col_split.col <- x[,feat_val[1]]
-	col_split.val <- feat_val[2]
-
-	# place rootnode
-	place.old <- 1
-	nodes <- c(1:nrow(x))
-	tree <- data.frame("feat"=feat_val[1], "val"=col_split.val, "label"=-1)
-
-	
-	#  GO DOWN
-	node_left <- which(col_split.col < col_split.val)
-	tree <- tree.left_down(tree, node_left, place.old*2, x, y, nmin, minleaf, nfeat)
-	
-	node_right <- which(col_split.col > col_split.val)
-	tree <- tree.left_down(tree, node_right, place.old*2+1, x, y, nmin, minleaf, nfeat)
-	
-	return(tree)
-
-}
+####################### GROW AND BAG AUX #################################
 
 # grow down from given node, favouring left
 tree.left_down <- function(tree, node_left, place.new, x, y, nmin, minleaf, nfeat){
@@ -162,37 +216,13 @@ tree.left_down <- function(tree, node_left, place.new, x, y, nmin, minleaf, nfea
 	return(tree)
 }
 
-# grow m trees over m bootstrap samples
-tree.grow.bag <- function(x, y, nmin, minleaf, nfeat, m){
-	returnlist <- list()
-	#create m trees
-	for(i in 1:m){
-		x$y <- y
-		training <- tree.bootstrap_sample(x, m)
-		new_y <- training[,ncol(training)]
-		training$y <- NULL
-		returnlist[[i]] <- tree.grow(training, new_y, nmin, minleaf, nfeat)
-	}
-	return(returnlist)
-}
-
 # create a sample of size m from data, with replacement
 tree.bootstrap_sample <- function(data, m){
 	return(data[sample(1:nrow(data), m, replace=T),])
 }
 
 
-####################### CLASSIFY AND BAG #################################
-
-tree.classify <- function(x, tree) {
-  labeled <- vector()
-  
-  for(i in 1:nrow(x)){
-    output <- tree.classify_rec(x[i,], tree, 1)
-    labeled <- c(labeled, output)
-  }
-  return(labeled)
-}
+####################### CLASSIFY AND BAG AUX #################################
 
 tree.classify_rec <- function(x, tree, n){
   
@@ -208,24 +238,6 @@ tree.classify_rec <- function(x, tree, n){
   else if(x[feature] >= value)
     tree.classify_rec(x, tree, 2*n+1)
   
-}
-
-# classify bagged trees by choosing majority vote after m trees
-tree.classify.bag <- function(x, trees){
-	prep <- seq(0,0,length.out=nrow(x))
-	#keep track of how many classified 1's and 0's
-	prediction <- data.frame("0"=prep, "1"=prep)
-
-	# fill prediction frame
-	for(tree in trees){
-		cl <- tree.classify(x, tree)
-		prediction <- tree.classify.bag.count(prediction, cl)
-	}
-	
-	# take majority vote
-	final_prediction <- prep
-	final_prediction[which(prediction[,1] < prediction[,2])] <- 1
-	return(final_prediction)
 }
 
 # sums the newly classified labels to the prediction dataframe

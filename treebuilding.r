@@ -1,4 +1,5 @@
 # Grow trees on classified data
+# Nora Schinkel & Johnno de Vos
 
 ####################### SPLIT AND LABEL #################################
 
@@ -43,13 +44,12 @@ bestsplit <- function(x, y, minleaf, splitpoints) {
 
 # Finds the best split over all features
 tree.createsplit <- function(x, y, nmin, minleaf, nfeat){
-
 	# number of features
 	tot_feat <- length(x)
 
-	# choose features with nfeat
+	# choose features with nfeat !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	# generate nfeat random numbers from tot_feat
-	rand_feat <- c(1,2,3,4,5)
+	rand_feat <- c(1:nfeat)
 
 	# calc splitpoints for these features
 	best_split.feat <- 0
@@ -58,7 +58,6 @@ tree.createsplit <- function(x, y, nmin, minleaf, nfeat){
 
 	for (feat in rand_feat) {
 		vec_x <- x[,feat]
-		# print(vec_x)
 
 		# calc splitpoints to check (no segment check)
 		vec_x.ready <- sort(unique(vec_x))
@@ -206,7 +205,7 @@ tree.classify_rec <- function(x, tree, n){
   
   if(x[feature] < value)
     tree.classify_rec(x, tree, 2*n)
-  else if(x[feature] > value)
+  else if(x[feature] >= value)
     tree.classify_rec(x, tree, 2*n+1)
   
 }
@@ -244,12 +243,67 @@ tree.classify.bag.count <- function(prediction, new_data){
 
 ####################### TESTS #################################
 
-credit.dat <- read.csv("_data/credit.txt")
-credit.x <- credit.dat[1:5]
-credit.y <- credit.dat[,6]
+# credit.dat <- read.csv("_data/credit.txt")
+# credit.x <- credit.dat[1:5]
+# credit.y <- credit.dat[,6]
 
-trees <- tree.grow.bag(credit.x, credit.y, 1, 1, 5, 5)
-print(tree.classify.bag(credit.x, trees))
+# trees <- tree.grow.bag(credit.x, credit.y, 1, 1, 5, 5)
+# print(tree.classify.bag(credit.x, trees))
 
+# cut unwanted values from the data
+preprocess <- function(csvfile){
+	credit.dat <- read.csv(csvfile, header=TRUE, sep=";")
+	credit.dat$post <- as.numeric(credit.dat$post > 0)
+	# package_names <- credit.dat$packagename
+	credit.dat$plugin <- NULL
+	credit.dat$packagename <- NULL
+	# credit.dat$post <- NULL
+	credit.dat <- credit.dat[1:42]
+	return(credit.dat)
 
+}
 
+# computes accuracy, recall and precision
+measures <- function(returned, real){
+	returned.positives <- sum(returned)
+	real.positives <- sum(real)
+	returned.true_positives <- length(which(real+returned == 2))
+	measure.recall <- returned.true_positives/real.positives
+	measure.precision <- returned.true_positives/returned.positives
+
+	# ACCURACY !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	print(c(measure.recall, measure.precision))
+}
+
+# set training set, test set and variables
+
+train.x <- preprocess("_data/eclipse-metrics-packages-2.0.csv")
+train.y <- train.x$post
+train.x$post <- NULL
+
+test.x <- preprocess("_data/eclipse-metrics-packages-3.0.csv")
+test.y <- test.x$post
+test.x$post <- NULL
+
+nmin <- 15
+minleaf <- 5
+nfeat <- 41
+m <- 10
+
+#### normal tree #####
+
+tree.normal <- tree.grow(train.x, train.y, nmin, minleaf, nfeat)
+classify.normal <- tree.classify(test.x, tree.normal)
+
+measures.normal <- measures(classify.normal, test.y)
+
+#### bagged tree #####
+
+tree.bagged <- tree.grow.bag(train.x, train.y, nmin, minleaf, nfeat, m)
+classify.bagged <- tree.classify.bag(test.x, tree.bagged)
+
+measures.bagged <- measures(classify.bagged, test.y)
+
+#### forest #####
+
+# TO DO

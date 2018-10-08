@@ -1,6 +1,6 @@
-credit.dat <- read.csv("C:/Users/Johnno/Documents/Data Mining/DataMining/_data/credit.txt")
-credit.x <- credit.dat[1:5]
-credit.y <- credit.dat[,6]
+# Grow trees on classified data
+
+####################### SPLIT AND LABEL #################################
 
 # Calc impurity by Gini index
 impurity <- function(vector) {
@@ -90,6 +90,40 @@ tree.label <- function(y, nodes){
 	return(label)
 }
 
+####################### GROW AND BAG #################################
+
+# grow a tree on a sample x, with labels y
+# the tree is a list of c objects. each node n is spaced n*2and n*2+1 from its children
+tree.grow <- function(x, y, nmin, minleaf, nfeat) {
+
+	# root node
+	feat_val <- tree.createsplit(x, y, nmin, minleaf, nfeat)
+
+	# no split from root
+	if(feat_val[1] == 0){
+		return(data.frame("feat"=0, "val"=0, "label"=label(y,c(1:length(y)))))
+	}
+
+	col_split.col <- x[,feat_val[1]]
+	col_split.val <- feat_val[2]
+
+	# place rootnode
+	place.old <- 1
+	nodes <- c(1:nrow(x))
+	tree <- data.frame("feat"=feat_val[1], "val"=col_split.val, "label"=-1)
+
+	
+	#  GO DOWN
+	node_left <- which(col_split.col < col_split.val)
+	tree <- tree.left_down(tree, node_left, place.old*2, x, y, nmin, minleaf, nfeat)
+	
+	node_right <- which(col_split.col > col_split.val)
+	tree <- tree.left_down(tree, node_right, place.old*2+1, x, y, nmin, minleaf, nfeat)
+	
+	return(tree)
+
+}
+
 # grow down from given node, favouring left
 tree.left_down <- function(tree, node_left, place.new, x, y, nmin, minleaf, nfeat){
 	while (!node_left[1] == 0){
@@ -106,12 +140,12 @@ tree.left_down <- function(tree, node_left, place.new, x, y, nmin, minleaf, nfea
 			# if there is no good split available, create a leaf node
 			if(col_split.val == 0){
 				label <- tree.label(y, node_left)
-				tree[[place.new]] <- c(0, 0, label)
+				tree[place.new,] <- c(0, 0, label)
 				node_left <- c(0)
 				}
 			# else place node in tree and set everything up for creating children
 			else {
-				tree[[place.new]] <- c(feat_val[1], col_split.val, node_left)
+				tree[place.new,] <- c(feat_val[1], col_split.val, -1)
 				new_node.left <- intersect(which(col_split.col < col_split.val), node_left)
 				new_node.right <- intersect(which(col_split.col > col_split.val), node_left)
 				tree <- tree.left_down(tree, new_node.right, place.new * 2 + 1, x, y, nmin, minleaf, nfeat)
@@ -122,84 +156,53 @@ tree.left_down <- function(tree, node_left, place.new, x, y, nmin, minleaf, nfea
 		} else {
 			# write leafnode
 			label <- tree.label(y, node_left)
-			tree[[place.new]] <- c(0, 0, label)
+			tree[place.new,] <- c(0, 0, label)
 			node_left <- c(0)
 		}
 	}
 	return(tree)
 }
 
-# remove all extra items from the nodes
-tree.cut <- function(tree){
-	index <- 0
-	for (node in tree){
-		index <- index + 1
-		if (!is.null(node)){
-			if (!node[1] == 0){
-				tree[[index]] <- node[1:2]
-			}
-		}
+# grow m trees over m bootstrap samples
+tree.grow.bag <- function(x, y, nmin, minleaf, nfeat, m){
+	returnlist <- list()
+	#create m trees
+	for(i in 1:m){
+		x$y <- y
+		training <- tree.bootstrap_sample(x, m)
+		new_y <- training[,ncol(training)]
+		training$y <- NULL
+		returnlist[[i]] <- tree.grow(training, new_y, nmin, minleaf, nfeat)
 	}
-	return(tree)
+	return(returnlist)
 }
 
-# grow a tree on a sample x, with labels y
-# the tree is a list of c objects. each node n is spaced n*2and n*2+1 from its children
-tree.grow <- function(x, y, nmin, minleaf, nfeat) {
-
-	# setup tree
-	tree <- list()
-
-	# root node
-	feat_val <- tree.createsplit(x, y, nmin, minleaf, nfeat)
-
-	col_split.col <- x[,feat_val[1]]
-	col_split.val <- feat_val[2]
-
-	# place rootnode
-	place.old <- 1
-	nodes <- c(1:nrow(x))
-	node_root <- c(feat_val[1], col_split.val, nodes)
-	tree[[1]] <- node_root
-
-	
-	#  GO DOWN
-	node_left <- which(col_split.col < col_split.val)
-	tree <- tree.left_down(tree, node_left, place.old*2, x, y, nmin, minleaf, nfeat)
-	
-	node_right <- which(col_split.col > col_split.val)
-	tree <- tree.left_down(tree, node_right, place.old*2+1, x, y, nmin, minleaf, nfeat)
-
-	# take care of extra values
-	tree <- tree.cut(tree)
-	print(tree)
-	
-	return(tree)
-
+# create a sample of size m from data, with replacement
+tree.bootstrap_sample <- function(data, m){
+	return(data[sample(1:nrow(data), m, replace=T),])
 }
+
+
+####################### CLASSIFY AND BAG #################################
 
 tree.classify <- function(x, tree) {
-  labelled <- vector()
+  labeled <- vector()
   
   for(i in 1:nrow(x)){
-    output = tree.classify_rec(x[i,], tree, 1)
-    labelled <- c(labelled, output)
+    output <- tree.classify_rec(x[i,], tree, 1)
+    labeled <- c(labeled, output)
   }
-  #output = tree.classify_rec(x[1,], tree, 1)
-  #print(output)
-  #labelled <- c(labelled, output)
-  print(labelled)
+  return(labeled)
 }
 
 tree.classify_rec <- function(x, tree, n){
   
-  node = tree[[n]]
-  feature = node[1]
-  value = node[2]
-  class = node[3]
+  node <- tree[n,]
+  feature <- node$feat
+  value <- node$val
   
   if(feature == 0 && value == 0)
-    return(class)
+    return(node$label)
   
   if(x[feature] < value)
     tree.classify_rec(x, tree, 2*n)
@@ -208,18 +211,45 @@ tree.classify_rec <- function(x, tree, n){
   
 }
 
-# create a sample of size m from data, with replacement
-tree.bootstrap_sample <- function(data, m){
-	return(data[sample(1:nrow(data), m, replace=T),])
+# classify bagged trees by choosing majority vote after m trees
+tree.classify.bag <- function(x, trees){
+	prep <- seq(0,0,length.out=nrow(x))
+	#keep track of how many classified 1's and 0's
+	prediction <- data.frame("0"=prep, "1"=prep)
+
+	# fill prediction frame
+	for(tree in trees){
+		cl <- tree.classify(x, tree)
+		prediction <- tree.classify.bag.count(prediction, cl)
+	}
+	
+	# take majority vote
+	final_prediction <- prep
+	final_prediction[which(prediction[,1] < prediction[,2])] <- 1
+	return(final_prediction)
 }
 
-tree.grow(credit.x, credit.y, 1, 1, 5)
-tree <- tree.grow(credit.x, credit.y, 1, 1, 5)
-tree.classify(credit.x, tree)
+# sums the newly classified labels to the prediction dataframe
+tree.classify.bag.count <- function(prediction, new_data){
+	for(i in 1:length(new_data)){
+		if(new_data[i] == 0){
+			prediction[i,1] <- prediction[i,1] + 1
+		}
+		else{
+			prediction[i,2] <- prediction[i,2] + 1
+		}
+	}
+	return(prediction)
+}
 
-s <- tree.bootstrap_sample(credit.x, 20)
+####################### TESTS #################################
 
+credit.dat <- read.csv("_data/credit.txt")
+credit.x <- credit.dat[1:5]
+credit.y <- credit.dat[,6]
 
-print(s)
+trees <- tree.grow.bag(credit.x, credit.y, 1, 1, 5, 5)
+print(tree.classify.bag(credit.x, trees))
+
 
 

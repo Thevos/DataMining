@@ -135,7 +135,9 @@ tree.createsplit <- function(x, y, nmin, minleaf, nfeat){
 
 	# choose features with nfeat !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	# generate nfeat random numbers from tot_feat
-	rand_feat <- c(1:nfeat)
+	#rand_feat <- c(1:nfeat)
+	
+	rand_feat <- sample(tot_feat, nfeat, replace=FALSE)
 
 	# calc splitpoints for these features
 	best_split.feat <- 0
@@ -318,4 +320,9 @@ measures.bagged <- measures(classify.bagged, test.y)
 
 #### forest #####
 
-# TO DO
+nfeat_forest <- floor(sqrt(nfeat))
+tree.forest <- tree.grow.bag(train.x, train.y, nmin, minleaf, nfeat_forest, m)
+classify.forest <- tree.classify.bag(test.x, tree.forest)
+
+measures.forest <- measures(classify.forest, test.y)
+

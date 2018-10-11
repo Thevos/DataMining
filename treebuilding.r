@@ -133,10 +133,7 @@ tree.createsplit <- function(x, y, nmin, minleaf, nfeat){
 	# number of features
 	tot_feat <- length(x)
 
-	# choose features with nfeat !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	# generate nfeat random numbers from tot_feat
-	#rand_feat <- c(1:nfeat)
-	
 	rand_feat <- sample(tot_feat, nfeat, replace=FALSE)
 
 	# calc splitpoints for these features
@@ -280,13 +277,19 @@ preprocess <- function(csvfile){
 # computes accuracy, recall and precision
 measures <- function(returned, real){
 	returned.positives <- sum(returned)
-	real.positives <- sum(real)
 	returned.true_positives <- length(which(real+returned == 2))
+	returned.false_positives <- returned.positives - returned.true_positives
+	returned.false_negatives <- length(which(returned-real == -1))
+	returned.total_correct <- length(which(real==returned))
+
+	real.positives <- sum(real)
+
 	measure.recall <- returned.true_positives/real.positives
 	measure.precision <- returned.true_positives/returned.positives
+	measure.acuracy <- returned.total_correct/(returned.total_correct+returned.false_positives+returned.false_negatives)
 
 	# ACCURACY !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	print(c(measure.recall, measure.precision))
+	print(c(measure.acuracy, measure.recall, measure.precision))
 }
 
 # set training set, test set and variables

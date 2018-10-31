@@ -47,12 +47,16 @@ get_folds <- function(){
 	return (folds.list)
 }
 
+measures <- function(table){
+	accuracy <- (table[1,1]+table[2,2])/160
+	recall <- table[2,2]/(table[1,2]+table[2,2])
+	precision <- table[2,2]/(table[2,1]+table[2,2])
+	f_measure <- (2*precision*recall)/(precision+recall)
+	return(list(accuracy=accuracy, recall=recall, precision=precision,f_measure=f_measure))
+}
+
 ######################### NAIVE BAYES #############################
 
-###########
-# HYPER PARAM ##
-# ntopfeat <- 300
-##########
 
 bayes.topfeat <- function(ntopfeat, train.dtm, train.labels) {
 	# compute mutual information of each term with class label
@@ -63,7 +67,6 @@ bayes.topfeat <- function(ntopfeat, train.dtm, train.labels) {
 	return (train.mi.order[1:ntopfeat])
 
 }
-
 
 
 bayes.train_hyper <- function(topfrom, topto, reviews, no_runs) {
@@ -129,6 +132,8 @@ bayes.train_hyper <- function(topfrom, topto, reviews, no_runs) {
 
 bayes.train_test <- function(train, train_labels, test, test_labels, ntopfeat, no_runs){
 	accuracy <- 0
+	precision <- 0
+	recall <- 0
 	for(no in c(1:no_runs)){
 		train.dtm <- DocumentTermMatrix(train)
 		train.dtm <- removeSparseTerms(train.dtm, 0.95)
@@ -137,10 +142,16 @@ bayes.train_test <- function(train, train_labels, test, test_labels, ntopfeat, n
 		model.trained <- train.mnb(as.matrix(train.dtm)[,train.top_feat], train_labels)
 		model.predicted <- predict.mnb(model.trained, as.matrix(test.dtm)[,train.top_feat])
 		model.table <- table(model.predicted,test_labels)
-		accuracy <- accuracy + (model.table[1,1]+model.table[2,2])/160
+		measures <- measures(model.table)
+		accuracy <- accuracy + measures$accuracy
+		precision <- precision + measures$precision
+		recall <- recall + measures$recall
 	}
 	accuracy <- accuracy/no_runs
-	return(accuracy)
+	precision <- precision/no_runs
+	recall <- recall/no_runs
+	f_measure <- (2*precision*recall)/(precision+recall)
+	return(list(accuracy=accuracy, recall=recall, precision=precision,f_measure=f_measure))
 }
 
 # from slides
@@ -174,8 +185,17 @@ predict.mnb <- function (model,dtm) {
 	return(classlabels[max.col(logprobs)])
 }
 
-bayes.hyper_param <- bayes.train_hyper(40,45,reviews.all,10)
-bayes.train_test(reviews.all, labels, reviews.test_all, labels_test, bayes.hyper_param, 10)
+###########
+# HYPER PARAM TEST ##
+from <- 100
+to <- 102
+runs <- 10
+##########
+
+bayes.hyper_param <- bayes.train_hyper(from,to,reviews.all,runs)
+bayes.train_test(reviews.all, labels, reviews.test_all, labels_test, bayes.hyper_param, runs)
+
+#########################################################################
 # print(train.dtm)
 # print(inspect(train.dtm))
 

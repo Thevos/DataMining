@@ -255,6 +255,7 @@ predict.mnb <- function (model,dtm) {
 logreg.train_test <- function(train.matrix, labels, test.matrix, labels_test){
 	# print(test.matrix)
 	reviews.glmnet <- cv.glmnet(train.matrix,labels, family="binomial",type.measure="class")
+	print(reviews.glmnet$lambda.min)
 	reviews.logreg.pred <- predict(reviews.glmnet, newx=test.matrix,s="lambda.1se",type="class")
 	return(measures(table(reviews.logreg.pred,labels_test)))
 
@@ -275,7 +276,7 @@ logreg.start <- function(train, labels, test, labels_test, method, no_runs){
 ########### HYPER PARAM BAYES ##
 from <- 100
 to <- 101
-runs <- 10
+runs <- 50
 method <- "normal"
 
 # bayes.hyper_param <- bayes.train_hyper(from,to,reviews.all,runs, method=method)

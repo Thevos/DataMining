@@ -1,6 +1,10 @@
 library(tm)
 library(SnowballC)
 library(entropy)
+library(glmnet)
+library(methods)
+library(RWeka)
+
 
 # library(caret)
 # setwd("C:/Users/Johnno/Documents/Data Mining/DataMining/2.Spam ")
@@ -33,6 +37,45 @@ reviews.all <- tm_map(reviews.all,stripWhitespace)
 reviews.all <- tm_map(reviews.all, stemDocument, language="english")
 
 
+############################### EXTRA FEATURES ###########################
+
+# TF-IDF
+# from slides
+tf_idf.train <- function(train){
+	train.dtm <- DocumentTermMatrix(train, control=list(weighting=weightTfIdf))
+	train.dtm <- removeSparseTerms(train.dtm,0.95)
+	return (as.matrix(train.dtm))
+}
+# from slides
+tf_idf.test <- function(train, test){
+	train.dtm <- DocumentTermMatrix(train)
+	train.dtm <- removeSparseTerms(train.dtm, 0.95)
+	train.matrix <- as.matrix(train.dtm)
+	col <- ncol(train.matrix)
+	row <- nrow(train.matrix)
+	test.dtm <- DocumentTermMatrix(reviews.test_all, list(dictionary=dimnames(train.matrix)[[2]]))
+	train.matrix<- matrix(as.numeric(train.matrix > 0),nrow=row,ncol=col)
+	train.idf <- apply(train.matrix,2,sum)
+	train.idf <- log2(16000/train.idf)
+	test.matrix <- as.matrix(test.dtm)
+	for(i in 1:col){test.matrix[,i] <- test.matrix[,i]*train.idf[i]}
+	return (test.matrix)
+}
+
+# BIGRAMS
+# returns train matrix (from slides)
+BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+add_bigrams <- function(train){
+	train.dtm2 <- DocumentTermMatrix(train, control = list(tokenize = BigramTokenizer))
+	train.dtm2 <- removeSparseTerms(train.dtm2,0.99)
+	train.dtm <- DocumentTermMatrix(train)
+	train.dtm <- removeSparseTerms(train.dtm, 0.95)
+	train.dat <- cbind(as.matrix(train.dtm),as.matrix(train.dtm2))
+	return(train.dat)
+}
+
+############################### HELPER FUNCTIONS #######################
+
 # returns list with indexes of folds
 get_folds <- function(){
 	range <- c(1:640)
@@ -55,12 +98,32 @@ measures <- function(table){
 	return(list(accuracy=accuracy, recall=recall, precision=precision,f_measure=f_measure))
 }
 
-######################### NAIVE BAYES #############################
+# returns train and test matrices based upon chosen method and train and test data
+get_matrices <-function(train, test, method){
+	# get matrices
+	if (method == "weights"){
+		train.matrix <- tf_idf.train(train)
+		test.matrix <- tf_idf.test(train, test)
+	} else {
+		if(method=="normal"){
+			train.dtm <- DocumentTermMatrix(train)
+			train.dtm <- removeSparseTerms(train.dtm, 0.95)
+			train.matrix <- as.matrix(train.dtm)
+		} else if (method == "bigrams"){
+			train.matrix <- add_bigrams(train)
+		}
+		test.dtm <- DocumentTermMatrix(test, list(dictionary=dimnames(train.matrix)[[2]]))
+		test.matrix <- as.matrix(test.dtm)
+	}
+	return(list(test.matrix=test.matrix, train.matrix=train.matrix))
+}
+
+############################## NAIVE BAYES #############################
 
 
-bayes.topfeat <- function(ntopfeat, train.dtm, train.labels) {
+bayes.topfeat <- function(ntopfeat, train.matrix, train.labels) {
 	# compute mutual information of each term with class label
-	train.mi <- apply(as.matrix(train.dtm),2,
+	train.mi <- apply(train.matrix,2,
 	    function(x,y){mi.plugin(table(x,y)/length(y))},train.labels)
 	# sort the indices from high to low mutual information and get ntopfeat best
 	train.mi.order <- order(train.mi,decreasing=T)
@@ -69,7 +132,7 @@ bayes.topfeat <- function(ntopfeat, train.dtm, train.labels) {
 }
 
 
-bayes.train_hyper <- function(topfrom, topto, reviews, no_runs) {
+bayes.train_hyper <- function(topfrom, topto, reviews, no_runs, method) {
 	ntopfeat <- topfrom
 	range <- c(1:640)
 	best.topfeat <- ntopfeat
@@ -89,23 +152,18 @@ bayes.train_hyper <- function(topfrom, topto, reviews, no_runs) {
 				test.indices <- folds.all[[folds.val]]
 				train.indices <- range[-test.indices]
 
-				# create dtms
-				train.dtm <- DocumentTermMatrix(reviews.all[train.indices])
-				train.dtm <- removeSparseTerms(train.dtm, 0.95)
-
-				test.dtm <- DocumentTermMatrix(reviews.all[test.indices],
-		               list(dictionary=dimnames(train.dtm)[[2]]))
+				# get matrices
+				matrices <- get_matrices(reviews[train.indices], reviews[test.indices], method)
+				train.matrix <- matrices$train.matrix
+				test.matrix <- matrices$test.matrix
 
 				# get top features
 				train.labels <- labels[train.indices]
-				train.top_feat <- bayes.topfeat(ntopfeat, train.dtm, train.labels)
+				train.top_feat <- bayes.topfeat(ntopfeat, train.matrix, train.labels)
 
-				# train and test for no_runs
-				
-				model.trained <- train.mnb(as.matrix(train.dtm)[,train.top_feat], train.labels)
-
-				# predict on the test set
-				model.predicted <- predict.mnb(model.trained, as.matrix(test.dtm)[,train.top_feat])
+				# train and predict on the test set
+				model.trained <- train.mnb(train.matrix[,train.top_feat], train.labels)
+				model.predicted <- predict.mnb(model.trained, test.matrix[,train.top_feat])
 				model.table <- table(model.predicted,labels[test.indices])
 
 				# add accuary and start new
@@ -130,28 +188,34 @@ bayes.train_hyper <- function(topfrom, topto, reviews, no_runs) {
 	return(best.topfeat)
 }
 
-bayes.train_test <- function(train, train_labels, test, test_labels, ntopfeat, no_runs){
+# main bayes function
+bayes.start <- function(train, train_labels, test, test_labels, ntopfeat, no_runs, method){
 	accuracy <- 0
 	precision <- 0
 	recall <- 0
-	for(no in c(1:no_runs)){
-		train.dtm <- DocumentTermMatrix(train)
-		train.dtm <- removeSparseTerms(train.dtm, 0.95)
-		test.dtm <- DocumentTermMatrix(test, list(dictionary=dimnames(train.dtm)[[2]]))
-		train.top_feat <- bayes.topfeat(ntopfeat, train.dtm, train_labels)
-		model.trained <- train.mnb(as.matrix(train.dtm)[,train.top_feat], train_labels)
-		model.predicted <- predict.mnb(model.trained, as.matrix(test.dtm)[,train.top_feat])
-		model.table <- table(model.predicted,test_labels)
-		measures <- measures(model.table)
-		accuracy <- accuracy + measures$accuracy
-		precision <- precision + measures$precision
-		recall <- recall + measures$recall
+
+	matrices <- get_matrices(train, test, method)
+	train.matrix <- matrices$train.matrix
+	test.matrix <- matrices$test.matrix
+
+	# get top feats
+	train.top_feat <- bayes.topfeat(ntopfeat, train.matrix, train_labels)
+
+	# train&test for no_runs
+	l_tot <- bayes.train_test(train.matrix[,train.top_feat], train_labels, test.matrix[,train.top_feat], test_labels)
+	for(no in 1:(no_runs-1)){
+		l <- bayes.train_test(train.matrix[,train.top_feat], train_labels, test.matrix[,train.top_feat], test_labels)
+		l_tot <- mapply("+", l, l_tot)
 	}
-	accuracy <- accuracy/no_runs
-	precision <- precision/no_runs
-	recall <- recall/no_runs
-	f_measure <- (2*precision*recall)/(precision+recall)
-	return(list(accuracy=accuracy, recall=recall, precision=precision,f_measure=f_measure))
+	return(l_tot/no_runs)
+}
+
+# returns measures of one train/test run
+bayes.train_test <- function(train.m, train_labels, test.m, test_labels){
+	model.trained <- train.mnb(train.m, train_labels)
+	model.predicted <- predict.mnb(model.trained, test.m)
+	model.table <- table(model.predicted,test_labels)
+	return(measures(model.table))
 }
 
 # from slides
@@ -185,18 +249,38 @@ predict.mnb <- function (model,dtm) {
 	return(classlabels[max.col(logprobs)])
 }
 
-###########
-# HYPER PARAM TEST ##
+######################## LOG REG ########################################
+
+
+logreg.train_test <- function(train.matrix, labels, test.matrix, labels_test){
+	# print(test.matrix)
+	reviews.glmnet <- cv.glmnet(train.matrix,labels, family="binomial",type.measure="class")
+	reviews.logreg.pred <- predict(reviews.glmnet, newx=test.matrix,s="lambda.1se",type="class")
+	return(measures(table(reviews.logreg.pred,labels_test)))
+
+}
+
+logreg.start <- function(train, labels, test, labels_test, method, no_runs){
+	matrices <- get_matrices(train, test, method) 
+	l_tot <- logreg.train_test(matrices$train.matrix, labels, matrices$test.matrix, labels_test)
+	for (i in 1:(no_runs-1)){
+		l <- logreg.train_test(matrices$train.matrix, labels, matrices$test.matrix, labels_test)
+		l_tot <- mapply("+", l, l_tot)
+	}
+	return(l_tot/no_runs)
+}
+
+############################ TESTS #############################################
+
+########### HYPER PARAM BAYES ##
 from <- 100
-to <- 102
+to <- 101
 runs <- 10
-##########
+method <- "normal"
 
-bayes.hyper_param <- bayes.train_hyper(from,to,reviews.all,runs)
-bayes.train_test(reviews.all, labels, reviews.test_all, labels_test, bayes.hyper_param, runs)
+# bayes.hyper_param <- bayes.train_hyper(from,to,reviews.all,runs, method=method)
+# bayes.start(reviews.all, labels, reviews.test_all, labels_test, bayes.hyper_param, runs, method=method)
 
-#########################################################################
-# print(train.dtm)
-# print(inspect(train.dtm))
+########## LOGREG ##
 
-
+logreg.start(reviews.all, labels, reviews.test_all, labels_test, method="normal", runs)
